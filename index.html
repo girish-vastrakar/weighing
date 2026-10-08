@@ -1,0 +1,692 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#1f2a33">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Weighing">
+<title>Proximate weighing</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&family=Noto+Sans+Gujarati:wght@400;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --ink: #1f2a33; --muted: #5a6872; --base: #eef2f4; --surface: #ffffff; --line: #d3dbe0;
+    --ok: #2e7d4f; --err: #b3261e; --warn: #9a5b00;
+    /* Test colours follow the header colours in the lab sheet */
+    --MC: #a8426b;  --MC-bg: #f5e3eb;
+    --VM: #3c7a2a;  --VM-bg: #e1f0d8;
+    --ASH: #574a9c; --ASH-bg: #e9e6f5;
+    --TM: #b0432d;  --TM-bg: #f8dfd8;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; background: var(--base); color: var(--ink);
+    font-family: 'Atkinson Hyperlegible', 'Noto Sans Gujarati', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+    font-size: 18px; line-height: 1.4; -webkit-tap-highlight-color: transparent;
+  }
+  button { font: inherit; color: inherit; cursor: pointer; }
+  :focus-visible { outline: 3px solid #2b6cb0; outline-offset: 2px; }
+  .wrap { max-width: 540px; margin: 0 auto; padding: 16px 16px 130px; }
+
+  header.top { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 16px; }
+  header.top h1 { font-size: 1.3rem; margin: 0; }
+  .hbtns { display: flex; gap: 8px; }
+  .pill { background: var(--surface); border: 1px solid var(--line); border-radius: 999px; padding: 8px 14px; font-size: .9rem; color: var(--muted); }
+
+  .tabs { display: grid; grid-template-columns: 1fr 1fr; background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 4px; margin-bottom: 12px; }
+  .tabs button { border: 0; background: none; padding: 12px 6px; border-radius: 10px; font-weight: 700; color: var(--muted); }
+  .tabs button[aria-selected="true"] { background: var(--ink); color: #fff; }
+  .count { display: inline-block; min-width: 1.5em; padding: 0 6px; margin-left: 6px; border-radius: 999px; background: var(--TM); color: #fff; font-size: .85rem; }
+
+  .field { width: 100%; padding: 14px 16px; font: inherit; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); margin-bottom: 12px; }
+  .list { display: flex; flex-direction: column; gap: 10px; }
+
+  .sample { display: block; width: 100%; text-align: left; background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 14px 16px; }
+  .sample .code { font-size: 1.5rem; font-weight: 700; }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+  .chip { font-size: .85rem; padding: 4px 10px; border-radius: 8px; border: 1px solid var(--line); color: var(--muted); }
+  .chip.prog { background: var(--c-bg); color: var(--c); border-color: var(--c); }
+  .chip.done { background: var(--c); color: #fff; border-color: var(--c); }
+
+  .back { background: none; border: 0; padding: 8px 0; font-weight: 700; color: var(--muted); font-size: 1rem; }
+  .title { font-size: 1.9rem; margin: 4px 0 2px; color: var(--c, var(--ink)); }
+  .sub { color: var(--muted); margin: 0 0 16px; }
+
+  .testbtn { display: block; width: 100%; text-align: left; background: var(--surface); border: 1px solid var(--line); border-left: 10px solid var(--c); border-radius: 14px; padding: 18px 16px; }
+  .testbtn .name { font-weight: 700; font-size: 1.15rem; }
+  .testbtn .state { color: var(--muted); font-size: .95rem; margin-top: 2px; }
+  .testbtn.done .state { color: var(--ok); font-weight: 700; }
+
+  .tmbox { margin-top: 22px; padding-top: 18px; border-top: 1px dashed var(--line); }
+  .tmbox .q { font-weight: 700; margin: 0 0 10px; }
+  .toggle { display: flex; gap: 8px; margin-bottom: 12px; }
+  .toggle button { flex: 1; padding: 14px; border-radius: 12px; border: 1px solid var(--line); background: var(--surface); font-weight: 700; }
+  .toggle button[aria-pressed="true"] { background: var(--ink); color: #fff; border-color: var(--ink); }
+
+  .steps { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin: 10px 0 6px; }
+  .steps span { height: 8px; border-radius: 4px; background: var(--line); }
+  .steps span.on { background: var(--c); }
+  .stepno { font-weight: 700; color: var(--c); margin: 0 0 14px; }
+  .instr { font-size: 1.3rem; font-weight: 700; margin: 0 0 6px; }
+
+  /* The balance-style readout: the one bold element */
+  .readout { display: flex; align-items: baseline; gap: 10px; background: #15212a; border-radius: 16px; padding: 18px 20px; border: 3px solid var(--c); }
+  .readout input { flex: 1; min-width: 0; background: none; border: 0; color: #e6f6ec; font: 700 2.6rem/1.1 'Atkinson Hyperlegible', 'Noto Sans Gujarati', system-ui, sans-serif; font-variant-numeric: tabular-nums; letter-spacing: .02em; outline: none; }
+  .readout input::placeholder { color: #4b5d68; }
+  .readout .unit { color: #9fb3bf; font-size: 1.4rem; }
+  .live { min-height: 1.6em; margin: 12px 2px 0; font-size: 1.1rem; }
+  .live b { font-variant-numeric: tabular-nums; }
+  .live .warn { color: var(--warn); font-weight: 700; }
+  .ind { display: inline-block; padding: 8px 14px; border-radius: 10px; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .ind.low { background: #fff1b8; color: #7a5300; border: 2px solid #e0b300; }
+  .ind.ok  { background: #dff3e6; color: var(--ok); border: 2px solid var(--ok); }
+
+  .prev { margin-top: 20px; background: var(--surface); border: 1px solid var(--line); border-radius: 14px; }
+  .prev .row { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 12px 16px; border-top: 1px solid var(--line); }
+  .prev .row:first-child { border-top: 0; }
+  .prev b { font-variant-numeric: tabular-nums; }
+  .link { background: none; border: 0; color: var(--c, var(--ink)); font-weight: 700; text-decoration: underline; padding: 8px; }
+  .center { display: block; margin: 16px auto 0; }
+
+  .result { display: flex; justify-content: space-between; align-items: baseline; background: var(--c-bg); border: 2px solid var(--c); border-radius: 14px; padding: 16px 18px; margin-top: 10px; }
+  .result b { font-size: 2rem; color: var(--c); font-variant-numeric: tabular-nums; }
+
+  .bar { position: fixed; left: 0; right: 0; bottom: 0; background: var(--surface); border-top: 1px solid var(--line); padding: 12px 16px calc(12px + env(safe-area-inset-bottom)); }
+  .bar .inner, .btnrow { max-width: 540px; margin: 0 auto; display: flex; gap: 10px; }
+  .primary { flex: 1; border: 0; border-radius: 14px; padding: 18px; font-weight: 700; font-size: 1.15rem; background: var(--c, var(--ink)); color: #fff; }
+  .primary:disabled { opacity: .5; }
+  .secondary { flex: 1; border: 1px solid var(--line); border-radius: 14px; padding: 18px; font-weight: 700; font-size: 1.05rem; background: var(--surface); }
+
+  .modal { position: fixed; inset: 0; background: rgba(20, 30, 38, .55); display: flex; align-items: flex-end; justify-content: center; z-index: 10; }
+  .sheet { background: var(--surface); width: 100%; max-width: 540px; border-radius: 20px 20px 0 0; padding: 24px 20px calc(20px + env(safe-area-inset-bottom)); }
+  .big { font-size: 2.8rem; font-weight: 700; font-variant-numeric: tabular-nums; margin: 6px 0 14px; }
+  .tick { width: 56px; height: 56px; border-radius: 50%; background: var(--ok); color: #fff; font-size: 2rem; display: grid; place-items: center; margin-bottom: 12px; }
+  @media (prefers-reduced-motion: no-preference) {
+    .sheet { animation: up .18s ease-out; }
+    @keyframes up { from { transform: translateY(24px); opacity: 0; } }
+  }
+
+  .toast { position: fixed; left: 50%; transform: translateX(-50%); bottom: 110px; background: var(--err); color: #fff; padding: 12px 18px; border-radius: 12px; width: max-content; max-width: 90%; z-index: 20; font-weight: 700; }
+  .toast.ok { background: var(--ok); }
+  .empty { text-align: center; color: var(--muted); padding: 40px 16px; }
+  .lang { font-weight: 700; color: var(--ink); }
+  html[lang="gu"] body { line-height: 1.5; }
+</style>
+</head>
+<body>
+<div class="wrap" id="app"><div class="empty">Loading…</div></div>
+
+<script>
+/* ====== SETTINGS: paste your Apps Script /exec link here ====== */
+const API_URL = 'https://script.google.com/macros/s/AKfycbzxu49Eg2pzDeKtD6LQjwcfi4iZv4y843mw6EF3wilCcGQ_Q7PpD2LiP8QJwM5fNTeD/exec';
+/* ============================================================== */
+
+const app = document.getElementById('app');
+const store = {
+  get(k) { try { return localStorage.getItem(k) || ''; } catch (e) { return ''; } },
+  set(k, v) { try { localStorage.setItem(k, v); } catch (e) {} }
+};
+const S = {
+  data: null, tests: null, order: [], worker: store.get('worker'), pin: store.get('pin'), lang: store.get('lang') || 'en',
+  view: 'home', tab: 'samples', query: '', showDone: false,
+  code: null, test: null, step: 1, editing: false, draft: '', modal: null, busy: false
+};
+
+/* ---------- words for each language (edit here to change any text) ---------- */
+const L = {
+  en: {
+    other: 'ગુજરાતી',
+    title: 'Proximate weighing',
+    loading: 'Loading samples…',
+    refresh: 'Refresh from sheet', updated: 'Updated from sheet',
+    tabSamples: 'Samples', tabOven: 'In oven / furnace',
+    find: 'Find a code, e.g. T05',
+    noMatch: q => `No code matches “${q}”.`,
+    allDone: 'All samples are complete.',
+    showDone: 'Show completed samples', hideDone: 'Hide completed samples',
+    ovenHint: 'Tap a sample when it is out and cooled.',
+    ovenEmpty: 'Nothing is in the oven or furnace right now.',
+    inHeat: h => `In the ${h}. Enter final weight`,
+    allSamples: '← All samples',
+    chooseTest: 'Choose the test you are weighing now.',
+    notStarted: 'Not started',
+    nextW2: 'Next: add sample and weigh (W2)',
+    done: 'Done', doneP: p => `Done: ${p}`,
+    vmWait: 'Shows after Moisture is done',
+    tmQ: 'Does this sample need Total Moisture?', no: 'No', yes: 'Yes',
+    stepOf: n => `Step ${n} of 3`,
+    correcting: (n, l) => `Correcting W${n}: ${l}`,
+    i1: v => `Put the empty ${v} on the balance.`,
+    s1: 'Enter the weight shown.',
+    i2: v => `Add the sample to the ${v} and put it on the balance.`,
+    s2: v => `Enter the total weight shown (${v} + sample).`,
+    aim: g => ` Aim for about ${g} g of sample. Green means enough.`,
+    i3: (v, h) => `Take the ${v} out of the ${h}, cool it in the desiccator, and put it on the balance.`,
+    wEmpty: v => `Empty ${v}`, wPlus: v => `${cap(v)} + sample`, wAfter: h => `After ${h}`,
+    correct: 'Correct', save: 'Save weight', result: 'Result',
+    sampleW: d => `Sample ≈ ${d} g`,
+    notLessW2: w => `This is not less than W2 (${w} g).`,
+    notMoreW1: (v, w) => `This is not more than the empty ${v} (${w} g).`,
+    heavier: w => `Heavier than before heating (${w} g). Check the balance.`,
+    lighter: (v, w) => `Less than the empty ${v} (${w} g). Check the balance.`,
+    ashLeft: (g, p) => `Ash left ≈ ${g} g (${p} %)`,
+    lost: g => `Weight lost ≈ ${g} g`,
+    isThis: 'Is this the weight on the balance?',
+    change: 'Change it', yesSave: 'Yes, save', saving: 'Saving…',
+    corrected: n => `W${n} corrected.`,
+    saved1: v => `Saved. Now add the sample to the ${v}.`,
+    saved2: (v, h) => `Saved. Put the ${v} in the ${h}.`,
+    saved3: (l, p) => `Saved. ${l} = ${p} %`,
+    saved3vm: l => `Saved. ${l} will show after Moisture is done.`,
+    enterW2: 'Enter W2 now', ok: 'OK',
+    typeWeight: 'Type the weight shown on the balance, for example 20.4523',
+    tmStays: 'Total Moisture already has weights, so it stays on.',
+    nameIntro: 'Enter your name and the lab PIN. Your name is saved with every weight you log.',
+    namePh: 'Your name', start: 'Start', enterName: 'Enter your name to start.',
+    pinPh: 'Lab PIN', enterPin: 'Enter the lab PIN.', wrongPin: 'Wrong lab PIN. Please enter it again.',
+    offline: 'No internet connection. Check the network and try again.',
+    loadFail: 'Could not read the sheet.', tryAgain: 'Try again',
+    errW2: v => `W2 must be more than W1 (empty ${v}).`,
+    errW1: 'W1 must be less than W2.',
+    errW3hi: 'Weight after heating cannot be more than W2.',
+    errW3lo: v => `Weight after heating cannot be less than the empty ${v} (W1).`,
+    chipStep2: 'step 2', chipIn: h => `in ${h}`,
+    label: { MC: 'Moisture', VM: 'Volatile Matter', ASH: 'Ash', TM: 'Total Moisture' },
+    short: { MC: 'Moisture', VM: 'VM', ASH: 'Ash', TM: 'Total moisture' },
+    vessel: { MC: 'petri dish', VM: 'VM crucible', ASH: 'ash crucible', TM: 'petri dish' },
+    heat: { oven: 'oven', furnace: 'furnace' }
+  },
+  gu: {
+    other: 'English',
+    title: 'પ્રોક્સિમેટ વજન નોંધ',
+    loading: 'સેમ્પલ લોડ થઈ રહ્યા છે…',
+    refresh: 'શીટમાંથી ફરી લોડ કરો', updated: 'શીટમાંથી અપડેટ થયું',
+    tabSamples: 'સેમ્પલ', tabOven: 'ઓવન / ફર્નેસમાં',
+    find: 'કોડ શોધો, દા.ત. T05',
+    noMatch: q => `“${q}” કોડ મળ્યો નથી.`,
+    allDone: 'બધા સેમ્પલ પૂરા થઈ ગયા છે.',
+    showDone: 'પૂરા થયેલા સેમ્પલ બતાવો', hideDone: 'પૂરા થયેલા સેમ્પલ છુપાવો',
+    ovenHint: 'સેમ્પલ બહાર કાઢીને ઠંડું થાય પછી તેના પર ટેપ કરો.',
+    ovenEmpty: 'હમણાં ઓવન કે ફર્નેસમાં કંઈ નથી.',
+    inHeat: h => `${h}માં છે. છેલ્લું વજન નાખો`,
+    allSamples: '← બધા સેમ્પલ',
+    chooseTest: 'હમણાં તમે કયા ટેસ્ટનું વજન કરો છો તે પસંદ કરો.',
+    notStarted: 'શરૂ નથી થયું',
+    nextW2: 'હવે: સેમ્પલ નાખીને વજન કરો (W2)',
+    done: 'પૂરું', doneP: p => `પૂરું: ${p}`,
+    vmWait: 'ભેજ પૂરું થયા પછી દેખાશે',
+    tmQ: 'શું આ સેમ્પલ માટે કુલ ભેજ (Total Moisture) કરવાનું છે?', no: 'ના', yes: 'હા',
+    stepOf: n => `પગલું ${n} / 3`,
+    correcting: (n, l) => `W${n} સુધારો: ${l}`,
+    i1: v => `ખાલી ${v} વજન કાંટા પર મૂકો.`,
+    s1: 'કાંટા પર જે વજન દેખાય તે નાખો.',
+    i2: v => `${v}માં સેમ્પલ નાખીને વજન કાંટા પર મૂકો.`,
+    s2: v => `કાંટા પર દેખાતું કુલ વજન નાખો (${v} + સેમ્પલ).`,
+    aim: g => ` લગભગ ${g} g સેમ્પલ લો. લીલું દેખાય એટલે પૂરતું છે.`,
+    i3: (v, h) => `${h}માંથી ${v} બહાર કાઢો, ડેસિકેટરમાં ઠંડું કરો અને વજન કાંટા પર મૂકો.`,
+    wEmpty: v => `ખાલી ${v}`, wPlus: v => `${v} + સેમ્પલ`, wAfter: h => `${h} પછી`,
+    correct: 'સુધારો', save: 'વજન સેવ કરો', result: 'પરિણામ',
+    sampleW: d => `સેમ્પલ ≈ ${d} g`,
+    notLessW2: w => `આ વજન W2 (${w} g) કરતાં ઓછું નથી.`,
+    notMoreW1: (v, w) => `આ વજન ખાલી ${v} (${w} g) કરતાં વધારે નથી.`,
+    heavier: w => `ગરમ કર્યા પહેલાંના વજન (${w} g) કરતાં વધારે છે. કાંટો તપાસો.`,
+    lighter: (v, w) => `ખાલી ${v} (${w} g) કરતાં ઓછું છે. કાંટો તપાસો.`,
+    ashLeft: (g, p) => `બાકી રાખ ≈ ${g} g (${p} %)`,
+    lost: g => `ઘટેલું વજન ≈ ${g} g`,
+    isThis: 'શું કાંટા પર આ જ વજન છે?',
+    change: 'બદલો', yesSave: 'હા, સેવ કરો', saving: 'સેવ થઈ રહ્યું છે…',
+    corrected: n => `W${n} સુધારી દીધું.`,
+    saved1: v => `સેવ થયું. હવે ${v}માં સેમ્પલ નાખો.`,
+    saved2: (v, h) => `સેવ થયું. ${v} ${h}માં મૂકો.`,
+    saved3: (l, p) => `સેવ થયું. ${l} = ${p} %`,
+    saved3vm: l => `સેવ થયું. ${l}નું પરિણામ ભેજ પૂરું થયા પછી દેખાશે.`,
+    enterW2: 'હવે W2 નાખો', ok: 'બરાબર',
+    typeWeight: 'કાંટા પર દેખાતું વજન લખો, દા.ત. 20.4523',
+    tmStays: 'કુલ ભેજના વજન નોંધાયેલા છે, તેથી તે ચાલુ રહેશે.',
+    nameIntro: 'તમારું નામ અને લેબ PIN લખો. દરેક વજન સાથે તમારું નામ સેવ થશે.',
+    namePh: 'તમારું નામ', start: 'શરૂ કરો', enterName: 'શરૂ કરવા તમારું નામ લખો.',
+    pinPh: 'લેબ PIN', enterPin: 'લેબ PIN લખો.', wrongPin: 'લેબ PIN ખોટો છે. ફરીથી લખો.',
+    offline: 'ઇન્ટરનેટ કનેક્શન નથી. નેટવર્ક તપાસીને ફરી પ્રયત્ન કરો.',
+    loadFail: 'શીટ વાંચી શકાઈ નથી.', tryAgain: 'ફરી પ્રયત્ન કરો',
+    errW2: v => `W2 એ W1 (ખાલી ${v}) કરતાં વધારે હોવું જોઈએ.`,
+    errW1: 'W1 એ W2 કરતાં ઓછું હોવું જોઈએ.',
+    errW3hi: 'ગરમ કર્યા પછીનું વજન W2 કરતાં વધારે ન હોઈ શકે.',
+    errW3lo: v => `ગરમ કર્યા પછીનું વજન ખાલી ${v} (W1) કરતાં ઓછું ન હોઈ શકે.`,
+    chipStep2: 'પગલું 2', chipIn: h => `${h}માં`,
+    label: { MC: 'ભેજ (Moisture)', VM: 'બાષ્પશીલ પદાર્થ (VM)', ASH: 'રાખ (Ash)', TM: 'કુલ ભેજ (Total Moisture)' },
+    short: { MC: 'ભેજ', VM: 'VM', ASH: 'રાખ', TM: 'કુલ ભેજ' },
+    vessel: { MC: 'પેટ્રી ડિશ', VM: 'VM ક્રુસિબલ', ASH: 'રાખની ક્રુસિબલ', TM: 'પેટ્રી ડિશ' },
+    heat: { oven: 'ઓવન', furnace: 'ફર્નેસ' }
+  }
+};
+const T = () => L[S.lang] || L.en;
+const lbl = k => T().label[k] || S.tests[k].label;
+const ves = k => T().vessel[k] || S.tests[k].vessel;
+const heat = k => T().heat[S.tests[k].heat] || S.tests[k].heat;
+
+/* ---------- helpers ---------- */
+// Sends a request to the Google Sheet back end (no Google login involved)
+async function call(action, ...args) {
+  let res;
+  try {
+    res = await fetch(API_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({ action, args, pin: S.pin })
+    });
+  } catch (e) { const err = new Error('offline'); err.code = 'OFFLINE'; throw err; }
+  let data;
+  try { data = await res.json(); }
+  catch (e) { throw new Error('The sheet did not reply properly (' + res.status + '). Check API_URL.'); }
+  if (!data.ok) { const err = new Error(data.error || 'Error'); err.code = data.code; throw err; }
+  return data.result;
+}
+function errText(err) {
+  return err.code === 'OFFLINE' ? T().offline : (err.message || String(err));
+}
+function pinRejected() {
+  S.pin = ''; store.set('pin', ''); S.modal = null; S.busy = false; S.view = 'name';
+  render(); toast(T().wrongPin);
+}
+function esc(s) {
+  return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+const isNum = v => typeof v === 'number' && !isNaN(v);
+const fmt = (n, d = 4) => isNum(n) ? n.toFixed(d) : '';
+const cvar = k => `--c:var(--${k});--c-bg:var(--${k}-bg)`;
+function cap(s) { return s.charAt(0).toUpperCase() + s.slice(1); }
+const sample = code => S.data.samples.find(s => s.code === code);
+function wLabel(k, i) {
+  const t = T();
+  return [t.wEmpty(ves(k)), t.wPlus(ves(k)), t.wAfter(heat(k))][i];
+}
+function parseW(str) {
+  const s = String(str || '').trim().replace(',', '.');
+  if (!/^\d*\.?\d+$/.test(s)) return null;
+  const v = Number(s);
+  return v > 0 ? v : null;
+}
+function pctLine(k, st) {
+  if (isNum(st.pct)) return `${st.pct.toFixed(2)} %`;
+  return k === 'VM' ? T().vmWait : '';
+}
+function toast(msg, ok) {
+  const el = document.createElement('div');
+  el.className = 'toast' + (ok ? ' ok' : '');
+  el.setAttribute('role', 'status');
+  el.textContent = msg;
+  document.body.appendChild(el);
+  setTimeout(() => el.remove(), ok ? 1500 : 4000);
+}
+function replaceSample(updated) {
+  const i = S.data.samples.findIndex(s => s.code === updated.code);
+  if (i >= 0) S.data.samples[i] = updated;
+}
+
+/* ---------- views ---------- */
+function langBtn() {
+  return `<button class="pill lang" data-act="lang" lang="${S.lang === 'en' ? 'gu' : 'en'}">${T().other}</button>`;
+}
+
+function header() {
+  return `<header class="top"><h1>${esc(T().title)}</h1>
+    <div class="hbtns">
+      ${langBtn()}
+      <button class="pill" data-act="refresh" aria-label="${esc(T().refresh)}">↻</button>
+      <button class="pill" data-act="name">${esc(S.worker)}</button>
+    </div></header>`;
+}
+
+function chip(k, st) {
+  const t = T(), short = t.short[k] || S.tests[k].label;
+  let cls = '', txt = short;
+  if (st.done === 3) { cls = 'done'; txt = short + ' ✓'; }
+  else if (st.done === 2) { cls = 'prog'; txt = `${short}: ${t.chipIn(heat(k))}`; }
+  else if (st.done === 1) { cls = 'prog'; txt = `${short}: ${t.chipStep2}`; }
+  return `<span class="chip ${cls}" style="${cvar(k)}">${esc(txt)}</span>`;
+}
+
+function listHTML() {
+  const q = S.query.trim().toLowerCase();
+  const list = S.data.samples.filter(s =>
+    (S.showDone || s.status !== 'Complete') && (!q || s.code.toLowerCase().includes(q)));
+  if (!list.length)
+    return `<div class="empty">${esc(q ? T().noMatch(S.query) : T().allDone)}</div>`;
+  return list.map(s => `
+    <button class="sample" data-act="open-sample" data-code="${esc(s.code)}">
+      <div class="code">${esc(s.code)}</div>
+      <div class="chips">${S.order.filter(k => s.tests[k].required).map(k => chip(k, s.tests[k])).join('')}</div>
+    </button>`).join('');
+}
+
+function renderHome() {
+  const t = T(), oven = [];
+  S.data.samples.forEach(s => S.order.forEach(k => {
+    const st = s.tests[k];
+    if (st.required && st.done === 2) oven.push({ code: s.code, k });
+  }));
+  let body;
+  if (S.tab === 'samples') {
+    body = `<input class="field" type="search" placeholder="${esc(t.find)}" value="${esc(S.query)}"
+              data-input="query" autocomplete="off" aria-label="${esc(t.find)}">
+      <div class="list" id="list">${listHTML()}</div>
+      <button class="link center" data-act="toggle-done">${esc(S.showDone ? t.hideDone : t.showDone)}</button>`;
+  } else {
+    body = oven.length
+      ? `<p class="sub">${esc(t.ovenHint)}</p><div class="list">${oven.map(o => `
+          <button class="testbtn" style="${cvar(o.k)}" data-act="open-final" data-code="${esc(o.code)}" data-test="${o.k}">
+            <div class="name">${esc(o.code)}, ${esc(lbl(o.k))}</div>
+            <div class="state">${esc(t.inHeat(heat(o.k)))}</div>
+          </button>`).join('')}</div>`
+      : `<div class="empty">${esc(t.ovenEmpty)}</div>`;
+  }
+  return header() + `
+    <div class="tabs" role="tablist">
+      <button role="tab" aria-selected="${S.tab === 'samples'}" data-act="tab" data-tab="samples">${esc(t.tabSamples)}</button>
+      <button role="tab" aria-selected="${S.tab === 'oven'}" data-act="tab" data-tab="oven">${esc(t.tabOven)}${oven.length ? `<span class="count">${oven.length}</span>` : ''}</button>
+    </div>` + body;
+}
+
+function stateText(k, st) {
+  const t = T();
+  if (st.done === 0) return t.notStarted;
+  if (st.done === 1) return t.nextW2;
+  if (st.done === 2) return t.inHeat(heat(k));
+  const p = pctLine(k, st);
+  return p ? t.doneP(p) : t.done;
+}
+
+function testBtn(s, k) {
+  const st = s.tests[k];
+  return `<button class="testbtn ${st.done === 3 ? 'done' : ''}" style="${cvar(k)}" data-act="open-test" data-test="${k}">
+    <div class="name">${esc(lbl(k))}</div>
+    <div class="state">${esc(stateText(k, st))}</div></button>`;
+}
+
+function renderSample() {
+  const t = T(), s = sample(S.code);
+  const main = S.order.filter(k => !S.tests[k].optional).map(k => testBtn(s, k)).join('');
+  const tmK = S.order.find(k => S.tests[k].optional);
+  const tm = tmK ? `<div class="tmbox">
+      <p class="q">${esc(t.tmQ)}</p>
+      <div class="toggle">
+        <button aria-pressed="${!s.tmRequired}" data-act="tm" data-val="0">${esc(t.no)}</button>
+        <button aria-pressed="${s.tmRequired}" data-act="tm" data-val="1">${esc(t.yes)}</button>
+      </div>
+      ${s.tmRequired ? testBtn(s, tmK) : ''}</div>` : '';
+  return `<div style="display:flex;justify-content:space-between;align-items:center">
+      <button class="back" data-act="home">${esc(t.allSamples)}</button>${langBtn()}</div>
+    <h2 class="title">${esc(s.code)}</h2>
+    <p class="sub">${esc(t.chooseTest)}</p>
+    <div class="list">${main}</div>${tm}`;
+}
+
+function renderStep() {
+  const t = T(), s = sample(S.code), k = S.test, st = s.tests[k], step = S.step, cfg = S.tests[k];
+  const instr = [
+    [t.i1(ves(k)), t.s1],
+    [t.i2(ves(k)), t.s2(ves(k)) + (cfg.targetSample ? t.aim(cfg.targetSample) : '')],
+    [t.i3(ves(k), heat(k)), t.s1]
+  ][step - 1];
+  const prev = st.w.map((w, i) => (isNum(w) && i !== step - 1) ? `
+    <div class="row"><span>${esc(wLabel(k, i))} (W${i + 1})<br><b>${fmt(w)} g</b></span>
+    <button class="link" data-act="edit" data-step="${i + 1}">${esc(t.correct)}</button></div>` : '').join('');
+  return `<div style="${cvar(k)}">
+    <div style="display:flex;justify-content:space-between;align-items:center">
+      <button class="back" data-act="back-sample">← ${esc(s.code)}</button>${langBtn()}</div>
+    <h2 class="title">${esc(lbl(k))}</h2>
+    <div class="steps">${[1, 2, 3].map(i => `<span class="${i <= step ? 'on' : ''}"></span>`).join('')}</div>
+    <p class="stepno">${esc(S.editing ? t.correcting(step, wLabel(k, step - 1)) : t.stepOf(step))}</p>
+    <p class="instr">${esc(instr[0])}</p>
+    <p class="sub">${esc(instr[1])}</p>
+    <label class="readout"><input id="w" type="text" inputmode="decimal" autocomplete="off"
+        placeholder="0.0000" value="${esc(S.draft)}" aria-label="W${step}"><span class="unit">g</span></label>
+    <div class="live" id="live" aria-live="polite">${liveText()}</div>
+    ${prev ? `<div class="prev">${prev}</div>` : ''}
+    <div class="bar"><div class="inner"><button class="primary" data-act="save">${esc(t.save)}</button></div></div>
+  </div>`;
+}
+
+function liveText() {
+  const v = parseW(S.draft);
+  if (v === null) return '';
+  const t = T(), k = S.test, cfg = S.tests[k], w = sample(S.code).tests[k].w;
+  const warn = m => `<span class="warn">${esc(m)}</span>`;
+  if (S.step === 1 && isNum(w[1]))
+    return v >= w[1] ? warn(t.notLessW2(fmt(w[1]))) : esc(t.sampleW(fmt(w[1] - v)));
+  if (S.step === 2 && isNum(w[0])) {
+    const d = v - w[0];
+    if (d <= 0) return warn(t.notMoreW1(ves(k), fmt(w[0])));
+    if (!cfg.targetSample) return esc(t.sampleW(fmt(d)));
+    return d < cfg.targetSample
+      ? `<span class="ind low">${esc(t.sampleW(fmt(d)))}</span>`
+      : `<span class="ind ok">${esc(t.sampleW(fmt(d)))} ✓</span>`;
+  }
+  if (S.step === 3 && isNum(w[0]) && isNum(w[1])) {
+    if (v > w[1]) return warn(t.heavier(fmt(w[1])));
+    if (v < w[0]) return warn(t.lighter(ves(k), fmt(w[0])));
+    const sw = w[1] - w[0];
+    if (k === 'ASH') return esc(t.ashLeft(fmt(v - w[0]), ((v - w[0]) / sw * 100).toFixed(2)));
+    const lost = t.lost(fmt(w[1] - v));
+    return esc(k === 'VM' ? lost : `${lost} (${((w[1] - v) / sw * 100).toFixed(2)} %)`);
+  }
+  return '';
+}
+
+function renderReview() {
+  const t = T(), s = sample(S.code), k = S.test, st = s.tests[k];
+  return `<div style="${cvar(k)}">
+    <div style="display:flex;justify-content:space-between;align-items:center">
+      <button class="back" data-act="back-sample">← ${esc(s.code)}</button>${langBtn()}</div>
+    <h2 class="title">${esc(lbl(k))}</h2>
+    <div class="result"><span>${esc(t.result)}</span><b>${esc(pctLine(k, st) || t.done)}</b></div>
+    <div class="prev">${st.w.map((w, i) => `
+      <div class="row"><span>${esc(wLabel(k, i))} (W${i + 1})<br><b>${fmt(w)} g</b></span>
+      <button class="link" data-act="edit" data-step="${i + 1}">${esc(t.correct)}</button></div>`).join('')}</div>
+  </div>`;
+}
+
+function renderName() {
+  const t = T();
+  return `<div style="display:flex;justify-content:flex-end">${langBtn()}</div>
+    <h1 style="margin-top:12px">${esc(t.title)}</h1>
+    <p class="sub">${esc(t.nameIntro)}</p>
+    <input class="field" id="nm" type="text" placeholder="${esc(t.namePh)}" value="${esc(S.worker)}" autocomplete="name" aria-label="${esc(t.namePh)}">
+    <input class="field" id="pin" type="password" inputmode="numeric" placeholder="${esc(t.pinPh)}" value="${esc(S.pin)}" autocomplete="off" aria-label="${esc(t.pinPh)}">
+    <div class="bar"><div class="inner"><button class="primary" data-act="save-name">${esc(t.start)}</button></div></div>`;
+}
+
+function renderModal() {
+  const m = S.modal;
+  if (!m) return '';
+  const t = T(), k = S.test;
+  if (m.type === 'confirm') return `<div class="modal" style="${cvar(k)}"><div class="sheet" role="dialog" aria-modal="true">
+      <p class="sub" style="margin:0">${esc(S.code)}, ${esc(lbl(k))}, W${S.step}: ${esc(wLabel(k, S.step - 1))}</p>
+      <div class="big">${esc(m.raw)} g</div>
+      <p style="margin-top:0">${esc(t.isThis)}</p>
+      <div class="btnrow">
+        <button class="secondary" data-act="cancel" ${S.busy ? 'disabled' : ''}>${esc(t.change)}</button>
+        <button class="primary" data-act="confirm" ${S.busy ? 'disabled' : ''}>${esc(S.busy ? t.saving : t.yesSave)}</button>
+      </div></div></div>`;
+  return `<div class="modal" style="${cvar(k)}"><div class="sheet" role="dialog" aria-modal="true">
+      <div class="tick" aria-hidden="true">✓</div>
+      <p class="instr">${esc(savedMsg(m))}</p>
+      <div class="btnrow"><button class="primary" data-act="after">${esc(m.next === 'step2' ? t.enterW2 : t.ok)}</button></div>
+    </div></div>`;
+}
+
+// Built at display time so it follows the language switch
+function savedMsg(m) {
+  const t = T(), k = S.test;
+  if (m.kind === 'corrected') return t.corrected(m.step);
+  if (m.kind === 's1') return t.saved1(ves(k));
+  if (m.kind === 's2') return t.saved2(ves(k), heat(k));
+  return isNum(m.pct) ? t.saved3(lbl(k), m.pct.toFixed(2)) : t.saved3vm(lbl(k));
+}
+
+function render() {
+  document.documentElement.lang = S.lang;
+  document.title = T().title;
+  if (!S.worker || !S.pin) S.view = 'name';
+  if (!S.data && S.view !== 'name') { app.innerHTML = `<div class="empty">${esc(T().loading)}</div>`; return; }
+  const v = { home: renderHome, sample: renderSample, step: renderStep, review: renderReview, name: renderName }[S.view];
+  app.innerHTML = v() + renderModal();
+  if (!S.modal) {
+    const nm = document.getElementById('nm');
+    const inp = document.getElementById('w') || (nm && nm.value ? document.getElementById('pin') : nm);
+    if (inp) inp.focus();
+  }
+}
+
+/* ---------- actions ---------- */
+async function load(showToast) {
+  try {
+    const d = await call('getData');
+    S.data = d; S.tests = d.tests; S.order = d.order;
+    render();
+    if (showToast) toast(T().updated, true);
+  } catch (err) {
+    if (err.code === 'PIN') { pinRejected(); return; }
+    app.innerHTML = `<div class="empty">${esc(T().loadFail)}<br>${esc(errText(err))}<br><br>
+      <button class="secondary" data-act="refresh">${esc(T().tryAgain)}</button></div>`;
+  }
+}
+
+function openTest(k) {
+  const st = sample(S.code).tests[k];
+  S.test = k; S.editing = false; S.draft = ''; S.modal = null;
+  if (st.done === 3) S.view = 'review';
+  else { S.step = st.done + 1; S.view = 'step'; }
+  render();
+}
+
+// Same checks as the sheet script, shown in the worker's language
+function checkWeight(v) {
+  const t = T(), k = S.test, w = sample(S.code).tests[k].w.slice();
+  w[S.step - 1] = v;
+  if (isNum(w[0]) && isNum(w[1]) && w[1] <= w[0]) return S.step === 1 ? t.errW1 : t.errW2(ves(k));
+  if (isNum(w[2]) && isNum(w[1]) && w[2] > w[1]) return t.errW3hi;
+  if (isNum(w[2]) && isNum(w[0]) && w[2] < w[0]) return t.errW3lo(ves(k));
+  return '';
+}
+
+function askConfirm() {
+  const v = parseW(S.draft);
+  if (v === null) { toast(T().typeWeight); return; }
+  const problem = checkWeight(v);
+  if (problem) { toast(problem); return; }
+  S.modal = { type: 'confirm', value: v, raw: S.draft.trim().replace(',', '.') };
+  render();
+}
+
+async function doSave() {
+  S.busy = true; render();
+  try {
+    const updated = await call('saveWeight', S.code, S.test, S.step, S.modal.value, S.worker);
+    replaceSample(updated);
+    const st = updated.tests[S.test];
+    let m = { type: 'saved', next: 'sample', step: S.step, pct: st.pct };
+    if (S.editing) m.kind = 'corrected';
+    else if (S.step === 1) { m.kind = 's1'; m.next = 'step2'; }
+    else if (S.step === 2) m.kind = 's2';
+    else m.kind = 's3';
+    S.modal = m;
+  } catch (err) {
+    if (err.code === 'PIN') { pinRejected(); return; }
+    S.modal = null;
+    toast(errText(err));
+  } finally {
+    if (S.view !== 'name') { S.busy = false; render(); }
+  }
+}
+
+async function setTm(val) {
+  const s = sample(S.code);
+  if (s.tmRequired === val) return;
+  const tmK = S.order.find(k => S.tests[k].optional);
+  if (!val && s.tests[tmK].done > 0) { toast(T().tmStays); return; }
+  S.busy = true;
+  try { replaceSample(await call('setTmRequired', S.code, val)); }
+  catch (err) { if (err.code === 'PIN') { pinRejected(); return; } toast(errText(err)); }
+  finally { if (S.view !== 'name') { S.busy = false; render(); } }
+}
+
+function saveName() {
+  const v = (document.getElementById('nm').value || '').trim();
+  const p = (document.getElementById('pin').value || '').trim();
+  if (!v) { toast(T().enterName); return; }
+  if (!p) { toast(T().enterPin); document.getElementById('pin').focus(); return; }
+  document.querySelectorAll('.toast').forEach(el => el.remove());
+  S.worker = v; store.set('worker', v);
+  S.pin = p; store.set('pin', p);
+  S.view = 'home'; S.data = null;
+  render(); load();
+}
+
+document.addEventListener('click', e => {
+  const el = e.target.closest('[data-act]');
+  if (!el || S.busy) return;
+  switch (el.dataset.act) {
+    case 'lang': {
+      const nm = document.getElementById('nm'), pn = document.getElementById('pin');
+      const typed = nm ? [nm.value, pn.value] : null;   // keep half-typed fields
+      S.lang = S.lang === 'en' ? 'gu' : 'en'; store.set('lang', S.lang);
+      render();
+      if (typed && document.getElementById('nm')) {
+        document.getElementById('nm').value = typed[0];
+        document.getElementById('pin').value = typed[1];
+      }
+      break;
+    }
+    case 'tab': S.tab = el.dataset.tab; render(); break;
+    case 'toggle-done': S.showDone = !S.showDone; render(); break;
+    case 'open-sample': S.code = el.dataset.code; S.view = 'sample'; render(); break;
+    case 'open-final': S.code = el.dataset.code; openTest(el.dataset.test); break;
+    case 'open-test': openTest(el.dataset.test); break;
+    case 'home': S.view = 'home'; render(); load(false); break;
+    case 'back-sample': S.view = 'sample'; S.modal = null; render(); break;
+    case 'tm': setTm(el.dataset.val === '1'); break;
+    case 'edit': {
+      S.step = Number(el.dataset.step); S.editing = true; S.view = 'step';
+      const w = sample(S.code).tests[S.test].w[S.step - 1];
+      S.draft = isNum(w) ? String(w) : ''; render(); break;
+    }
+    case 'save': askConfirm(); break;
+    case 'cancel': S.modal = null; render(); break;
+    case 'confirm': doSave(); break;
+    case 'after': {
+      const next = S.modal.next; S.modal = null;
+      if (next === 'step2') { S.step = 2; S.draft = ''; S.editing = false; S.view = 'step'; }
+      else S.view = 'sample';
+      render(); break;
+    }
+    case 'refresh': load(true); break;
+    case 'name': S.view = 'name'; render(); break;
+    case 'save-name': saveName(); break;
+  }
+});
+
+document.addEventListener('input', e => {
+  if (e.target.id === 'w') {
+    S.draft = e.target.value;
+    document.getElementById('live').innerHTML = liveText();
+  } else if (e.target.dataset.input === 'query') {
+    S.query = e.target.value;
+    document.getElementById('list').innerHTML = listHTML();
+  }
+});
+
+document.addEventListener('keydown', e => {
+  if (e.key !== 'Enter' || S.busy) return;
+  if (e.target.id === 'w') askConfirm();
+  else if (e.target.id === 'nm') document.getElementById('pin').focus();
+  else if (e.target.id === 'pin') saveName();
+});
+
+if (S.worker && S.pin) load(); else render();
+</script>
+</body>
+</html>
