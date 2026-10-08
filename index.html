@@ -47,6 +47,7 @@
   .field { width: 100%; padding: 14px 16px; font: inherit; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); margin-bottom: 12px; }
   .list { display: flex; flex-direction: column; gap: 10px; }
 
+  .sample.last, .testbtn.last { outline: 3px solid #2b6cb0; outline-offset: 2px; }
   .sample { display: block; width: 100%; text-align: left; background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 14px 16px; }
   .sample .code { font-size: 1.5rem; font-weight: 700; }
   .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
@@ -133,6 +134,8 @@ const store = {
   get(k) { try { return localStorage.getItem(k) || ''; } catch (e) { return ''; } },
   set(k, v) { try { localStorage.setItem(k, v); } catch (e) {} }
 };
+// Remembers where the worker was on the list, per tab (also kept after the app is closed)
+const POS = (() => { try { return JSON.parse(store.get('pos') || '{}'); } catch (e) { return {}; } })();
 const S = {
   data: null, tests: null, order: [], worker: store.get('worker'), pin: store.get('pin'), lang: store.get('lang') || 'en',
   view: 'home', tab: 'samples', query: '', showDone: false,
@@ -549,13 +552,43 @@ function savedMsg(m) {
   return isNum(m.pct) ? t.saved3(lbl(k), m.pct.toFixed(2)) : t.saved3vm(lbl(k));
 }
 
+function savePos() {
+  if (S.view !== 'home') return;
+  POS[S.tab] = Object.assign({}, POS[S.tab], { y: window.scrollY });
+  store.set('pos', JSON.stringify(POS));
+}
+function rememberCard(anchor) {
+  POS[S.tab] = { y: window.scrollY, anchor: anchor };
+  store.set('pos', JSON.stringify(POS));
+}
+// Put the list back where the worker left it: on the last card they opened if it is still there
+function restorePos() {
+  const p = POS[S.tab];
+  if (!p) return;
+  const card = p.anchor && document.querySelector(p.anchor);
+  if (card) {
+    card.classList.add('last');
+    card.scrollIntoView({ block: 'center' });
+  } else if (p.y) {
+    window.scrollTo(0, p.y);
+  }
+}
+
 function render() {
+  const prevView = S.lastView, keepY = window.scrollY;
+  S.lastView = S.view;
   document.documentElement.lang = S.lang;
   document.title = T().title;
   if (!S.worker || !S.pin) S.view = 'name';
   if (!S.data && S.view !== 'name') { app.innerHTML = `<div class="empty">${esc(T().loading)}</div>`; return; }
   const v = { home: renderHome, sample: renderSample, step: renderStep, review: renderReview, name: renderName }[S.view];
   app.innerHTML = v() + renderModal();
+  if (S.view === 'home') {
+    if (prevView !== 'home' || S.restoreOnce) { S.restoreOnce = false; restorePos(); }
+    else window.scrollTo(0, keepY);          // same screen redrawn: stay put
+  } else if (prevView !== S.view) {
+    window.scrollTo(0, 0);                   // new screen starts at the top
+  }
   if (!S.modal) {
     const nm = document.getElementById('nm');
     const inp = document.getElementById('w') || (nm && nm.value ? document.getElementById('pin') : nm);
@@ -670,12 +703,16 @@ document.addEventListener('click', e => {
       if (ev) { ev.prompt(); ev.userChoice.then(c => { if (c.outcome === 'accepted') toast(T().installed, true); }); }
       break;
     }
-    case 'tab': S.tab = el.dataset.tab; render(); break;
+    case 'tab': savePos(); S.tab = el.dataset.tab; S.restoreOnce = true; render(); break;
     case 'toggle-done': S.showDone = !S.showDone; render(); break;
-    case 'open-sample': S.code = el.dataset.code; S.view = 'sample'; render(); break;
-    case 'open-final': S.code = el.dataset.code; openTest(el.dataset.test); break;
+    case 'open-sample':
+      rememberCard(`.sample[data-code="${CSS.escape(el.dataset.code)}"]`);
+      S.code = el.dataset.code; S.view = 'sample'; render(); break;
+    case 'open-final':
+      rememberCard(`.testbtn[data-code="${CSS.escape(el.dataset.code)}"][data-test="${CSS.escape(el.dataset.test)}"]`);
+      S.code = el.dataset.code; openTest(el.dataset.test); break;
     case 'open-test': openTest(el.dataset.test); break;
-    case 'home': S.view = 'home'; render(); load(false); break;
+    case 'home': S.view = 'home'; render(); S.restoreOnce = true; load(false); break;
     case 'back-sample': S.view = 'sample'; S.modal = null; render(); break;
     case 'tm': setTm(el.dataset.val === '1'); break;
     case 'edit': {

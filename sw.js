@@ -1,6 +1,6 @@
 // Service worker for the weighing app.
 // Change VERSION whenever you upload a new index.html so phones pick it up.
-const VERSION = 'weighing-v1';
+const VERSION = 'weighing-v2';
 const SHELL = ['./', './index.html', './manifest.json',
   './icon-192.png', './icon-512.png', './icon-maskable-512.png', './apple-touch-icon.png'];
 
