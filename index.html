@@ -8,6 +8,9 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="Weighing">
 <title>Proximate weighing</title>
+<link rel="manifest" href="manifest.json">
+<link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&family=Noto+Sans+Gujarati:wght@400;700&display=swap" rel="stylesheet">
@@ -113,6 +116,7 @@
   .toast.ok { background: var(--ok); }
   .empty { text-align: center; color: var(--muted); padding: 40px 16px; }
   .lang { font-weight: 700; color: var(--ink); }
+  .install { background: var(--ok); color: #fff; border-color: var(--ok); font-weight: 700; }
   html[lang="gu"] body { line-height: 1.5; }
 </style>
 </head>
@@ -262,6 +266,8 @@ const L = {
     heat: { oven: 'ઓવન', furnace: 'ફર્નેસ' }
   }
 };
+L.en.install = 'Install app'; L.gu.install = 'એપ ઇન્સ્ટોલ કરો';
+L.en.installed = 'App installed. Open it from the home screen.'; L.gu.installed = 'એપ ઇન્સ્ટોલ થઈ ગઈ. હોમ સ્ક્રીન પરથી ખોલો.';
 const T = () => L[S.lang] || L.en;
 const lbl = k => T().label[k] || S.tests[k].label;
 const ves = k => T().vessel[k] || S.tests[k].vessel;
@@ -277,10 +283,21 @@ async function call(action, ...args) {
       headers: { 'Content-Type': 'text/plain;charset=utf-8' },
       body: JSON.stringify({ action, args, pin: S.pin })
     });
-  } catch (e) { const err = new Error('offline'); err.code = 'OFFLINE'; throw err; }
+  } catch (e) {
+    const err = new Error('offline'); err.code = 'OFFLINE';
+    err.detail = 'Browser blocked the request to Apps Script (' + (e.message || e) + '). ' +
+      'Usually: the deployment is running old code without doPost, or a browser shield/extension blocks script.google.com.';
+    throw err;
+  }
+  const text = await res.text();
   let data;
-  try { data = await res.json(); }
-  catch (e) { throw new Error('The sheet did not reply properly (' + res.status + '). Check API_URL.'); }
+  try { data = JSON.parse(text); }
+  catch (e) {
+    const err = new Error('The sheet did not reply properly (HTTP ' + res.status + ').');
+    err.detail = 'Apps Script replied with a page instead of data: ' +
+      text.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 200);
+    throw err;
+  }
   if (!data.ok) { const err = new Error(data.error || 'Error'); err.code = data.code; throw err; }
   return data.result;
 }
@@ -327,6 +344,10 @@ function replaceSample(updated) {
 }
 
 /* ---------- views ---------- */
+let installEvt = null;   // Android/desktop Chrome install prompt, saved for the button
+function installBtn() {
+  return installEvt ? `<button class="pill install" data-act="install">⤓ ${esc(T().install)}</button>` : '';
+}
 function langBtn() {
   return `<button class="pill lang" data-act="lang" lang="${S.lang === 'en' ? 'gu' : 'en'}">${T().other}</button>`;
 }
@@ -334,6 +355,7 @@ function langBtn() {
 function header() {
   return `<header class="top"><h1>${esc(T().title)}</h1>
     <div class="hbtns">
+      ${installBtn()}
       ${langBtn()}
       <button class="pill" data-act="refresh" aria-label="${esc(T().refresh)}">↻</button>
       <button class="pill" data-act="name">${esc(S.worker)}</button>
@@ -491,7 +513,7 @@ function renderReview() {
 
 function renderName() {
   const t = T();
-  return `<div style="display:flex;justify-content:flex-end">${langBtn()}</div>
+  return `<div style="display:flex;justify-content:flex-end;gap:8px">${installBtn()}${langBtn()}</div>
     <h1 style="margin-top:12px">${esc(t.title)}</h1>
     <p class="sub">${esc(t.nameIntro)}</p>
     <input class="field" id="nm" type="text" placeholder="${esc(t.namePh)}" value="${esc(S.worker)}" autocomplete="name" aria-label="${esc(t.namePh)}">
@@ -550,7 +572,9 @@ async function load(showToast) {
     if (showToast) toast(T().updated, true);
   } catch (err) {
     if (err.code === 'PIN') { pinRejected(); return; }
-    app.innerHTML = `<div class="empty">${esc(T().loadFail)}<br>${esc(errText(err))}<br><br>
+    app.innerHTML = `<div class="empty">${esc(T().loadFail)}<br>${esc(errText(err))}
+      ${err.detail ? `<p style="font-size:.8rem;margin-top:14px">Details: ${esc(err.detail)}</p>` : ''}
+      <p style="font-size:.8rem"><a href="${esc(API_URL)}" target="_blank" rel="noopener">Test the back-end link</a></p>
       <button class="secondary" data-act="refresh">${esc(T().tryAgain)}</button></div>`;
   }
 }
@@ -641,6 +665,11 @@ document.addEventListener('click', e => {
       }
       break;
     }
+    case 'install': {
+      const ev = installEvt; installEvt = null; render();
+      if (ev) { ev.prompt(); ev.userChoice.then(c => { if (c.outcome === 'accepted') toast(T().installed, true); }); }
+      break;
+    }
     case 'tab': S.tab = el.dataset.tab; render(); break;
     case 'toggle-done': S.showDone = !S.showDone; render(); break;
     case 'open-sample': S.code = el.dataset.code; S.view = 'sample'; render(); break;
@@ -685,6 +714,21 @@ document.addEventListener('keydown', e => {
   else if (e.target.id === 'nm') document.getElementById('pin').focus();
   else if (e.target.id === 'pin') saveName();
 });
+
+/* ---------- progressive web app ---------- */
+if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) {
+  window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => {}));
+}
+window.addEventListener('beforeinstallprompt', e => {
+  e.preventDefault(); installEvt = e;
+  if (!S.modal && S.view !== 'step') render();
+});
+window.addEventListener('appinstalled', () => { installEvt = null; if (!S.modal) render(); });
+// Refresh the sample list when the app comes back to the screen or the network returns
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible' && S.view === 'home' && !S.modal && !S.busy && S.data) load(false);
+});
+window.addEventListener('online', () => { if (S.view === 'home' && !S.busy && S.worker && S.pin) load(false); });
 
 if (S.worker && S.pin) load(); else render();
 </script>
