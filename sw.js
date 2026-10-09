@@ -1,6 +1,6 @@
 // Service worker for the weighing app.
 // Change VERSION whenever you upload a new index.html so phones pick it up.
-const VERSION = 'weighing-v2';
+const VERSION = 'weighing-v4';
 const SHELL = ['./', './index.html', './manifest.json',
   './icon-192.png', './icon-512.png', './icon-maskable-512.png', './apple-touch-icon.png'];
 
@@ -18,7 +18,9 @@ self.addEventListener('fetch', e => {
   const req = e.request;
   const url = new URL(req.url);
   // Never touch sheet traffic (Apps Script) or anything that isn't a GET
-  if (req.method !== 'GET' || url.hostname.endsWith('google.com') || url.hostname.endsWith('googleusercontent.com')) return;
+  // Only the app's own files and its fonts are cached. Never the stored data (api.github.com).
+  const isFont = url.hostname === 'fonts.googleapis.com' || url.hostname === 'fonts.gstatic.com';
+  if (req.method !== 'GET' || (url.origin !== self.location.origin && !isFont)) return;
 
   // The page itself: newest version when online, saved copy when offline
   if (req.mode === 'navigate') {

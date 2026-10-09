@@ -117,17 +117,34 @@
   .toast.ok { background: var(--ok); }
   .empty { text-align: center; color: var(--muted); padding: 40px 16px; }
   .lang { font-weight: 700; color: var(--ink); }
+  #sync { position: fixed; top: 8px; left: 50%; transform: translateX(-50%); z-index: 30; border: 0; border-radius: 999px;
+          padding: 8px 16px; font: 700 .9rem/1.2 inherit; background: #fff1b8; color: #7a5300; box-shadow: 0 2px 8px rgba(0,0,0,.15);
+          max-width: 92%; }
+  #sync.ok { background: #dff3e6; color: var(--ok); }
+  #sync.bad { background: #fde2e1; color: var(--err); }
   .install { background: var(--ok); color: #fff; border-color: var(--ok); font-weight: 700; }
   html[lang="gu"] body { line-height: 1.5; }
 </style>
 </head>
 <body>
+<button id="sync" type="button" hidden></button>
 <div class="wrap" id="app"><div class="empty">Loading…</div></div>
 
 <script>
-/* ====== SETTINGS: paste your Apps Script /exec link here ====== */
-const API_URL = 'https://script.google.com/macros/s/AKfycbwsH6JbVVi4_bx9bhokMP9TZNEpoA0SJy4jGTOEQH9GHGg3HAkPPTOwqhWa2MMSQA0S/exec';
-/* ============================================================== */
+/* ====== SETTINGS: where the results are stored (a PRIVATE GitHub repository) ====== */
+const GH = { owner: 'girish-vastrakar', repo: 'weighing-data', path: 'data.json', branch: 'main' };
+/* The access key is NOT written here. It is given to each phone once with the setup link:
+   https://girish-vastrakar.github.io/weighing/#key=YOUR_KEY   (the app saves it and hides it)  */
+
+// Tests, in the order shown. targetSample = sample weight (g) at which W2 turns green.
+const TESTS = {
+  MC:  { label: 'Moisture',        vessel: 'petri dish',   heat: 'oven',    targetSample: 1 },
+  VM:  { label: 'Volatile Matter', vessel: 'VM crucible',  heat: 'furnace', targetSample: 1 },
+  ASH: { label: 'Ash',             vessel: 'ash crucible', heat: 'furnace', targetSample: 1 },
+  TM:  { label: 'Total Moisture',  vessel: 'petri dish',   heat: 'oven',    targetSample: 10, optional: true }
+};
+const ORDER = Object.keys(TESTS);
+/* ================================================================================== */
 
 const app = document.getElementById('app');
 const store = {
@@ -137,7 +154,7 @@ const store = {
 // Remembers where the worker was on the list, per tab (also kept after the app is closed)
 const POS = (() => { try { return JSON.parse(store.get('pos') || '{}'); } catch (e) { return {}; } })();
 const S = {
-  data: null, tests: null, order: [], worker: store.get('worker'), pin: store.get('pin'), lang: store.get('lang') || 'en',
+  data: null, tests: null, order: [], worker: store.get('worker'), lang: store.get('lang') || 'en',
   view: 'home', tab: 'samples', query: '', showDone: false,
   code: null, test: null, step: 1, editing: false, draft: '', modal: null, busy: false
 };
@@ -191,9 +208,10 @@ const L = {
     enterW2: 'Enter W2 now', ok: 'OK',
     typeWeight: 'Type the weight shown on the balance, for example 20.4523',
     tmStays: 'Total Moisture already has weights, so it stays on.',
-    nameIntro: 'Enter your name and the lab PIN. Your name is saved with every weight you log.',
+    nameIntro: 'Enter your name. It is saved with every weight you log.',
     namePh: 'Your name', start: 'Start', enterName: 'Enter your name to start.',
-    pinPh: 'Lab PIN', enterPin: 'Enter the lab PIN.', wrongPin: 'Wrong lab PIN. Please enter it again.',
+    notSetUp: 'This phone is not connected yet. Ask the supervisor to open the setup link on it.',
+    keyBad: 'The storage key was not accepted. Ask the supervisor to set up this phone again.',
     offline: 'Could not reach the sheet. Check the internet connection, or ask the supervisor to check the app link.',
     loadFail: 'Could not read the sheet.', tryAgain: 'Try again',
     errW2: v => `W2 must be more than W1 (empty ${v}).`,
@@ -253,9 +271,10 @@ const L = {
     enterW2: 'હવે W2 નાખો', ok: 'બરાબર',
     typeWeight: 'કાંટા પર દેખાતું વજન લખો, દા.ત. 20.4523',
     tmStays: 'કુલ ભેજના વજન નોંધાયેલા છે, તેથી તે ચાલુ રહેશે.',
-    nameIntro: 'તમારું નામ અને લેબ PIN લખો. દરેક વજન સાથે તમારું નામ સેવ થશે.',
+    nameIntro: 'તમારું નામ લખો. દરેક વજન સાથે તે સેવ થશે.',
     namePh: 'તમારું નામ', start: 'શરૂ કરો', enterName: 'શરૂ કરવા તમારું નામ લખો.',
-    pinPh: 'લેબ PIN', enterPin: 'લેબ PIN લખો.', wrongPin: 'લેબ PIN ખોટો છે. ફરીથી લખો.',
+    notSetUp: 'આ ફોન હજી જોડાયેલો નથી. સુપરવાઇઝરને આ ફોન પર સેટઅપ લિંક ખોલવા કહો.',
+    keyBad: 'સ્ટોરેજ કી સ્વીકારાઈ નથી. સુપરવાઇઝરને આ ફોન ફરી સેટઅપ કરવા કહો.',
     offline: 'શીટ સાથે જોડાણ થઈ શક્યું નથી. ઇન્ટરનેટ તપાસો, અથવા સુપરવાઇઝરને એપ લિંક તપાસવા કહો.',
     loadFail: 'શીટ વાંચી શકાઈ નથી.', tryAgain: 'ફરી પ્રયત્ન કરો',
     errW2: v => `W2 એ W1 (ખાલી ${v}) કરતાં વધારે હોવું જોઈએ.`,
@@ -271,45 +290,232 @@ const L = {
 };
 L.en.install = 'Install app'; L.gu.install = 'એપ ઇન્સ્ટોલ કરો';
 L.en.installed = 'App installed. Open it from the home screen.'; L.gu.installed = 'એપ ઇન્સ્ટોલ થઈ ગઈ. હોમ સ્ક્રીન પરથી ખોલો.';
+Object.assign(L.en, { noCodes: 'No sample codes yet. The supervisor adds them with ⚙ Setup.' });
+Object.assign(L.gu, { noCodes: 'હજી કોઈ સેમ્પલ કોડ નથી. સુપરવાઇઝર ⚙ સેટઅપમાંથી ઉમેરશે.' });
+Object.assign(L.en, {
+  pending: n => `⏳ ${n} change${n > 1 ? 's' : ''} waiting to be saved online`,
+  sending: n => `⟳ Saving ${n} online…`,
+  retrying: n => `⚠ ${n} not sent yet. Retrying automatically. Tap to retry now`,
+  allSent: '✓ Everything saved online',
+  notSaved: (c, l, n, m) => `${c} ${l} W${n} was not saved: ${m}`,
+  cachedList: 'Showing the list saved on this phone. It will update when online.'
+});
+Object.assign(L.gu, {
+  pending: n => `⏳ ${n} ફેરફાર ઓનલાઇન સેવ થવાના બાકી છે`,
+  sending: n => `⟳ ${n} ઓનલાઇન સેવ થઈ રહ્યા છે…`,
+  retrying: n => `⚠ ${n} વજન હજી ગયા નથી. આપમેળે ફરી પ્રયત્ન થશે. હમણાં મોકલવા ટેપ કરો`,
+  allSent: '✓ બધું ઓનલાઇન સેવ થઈ ગયું',
+  notSaved: (c, l, n, m) => `${c} ${l} W${n} સેવ થયું નથી: ${m}`,
+  cachedList: 'ફોનમાં સેવ થયેલી યાદી દેખાય છે. ઇન્ટરનેટ મળતાં અપડેટ થશે.'
+});
 const T = () => L[S.lang] || L.en;
 const lbl = k => T().label[k] || S.tests[k].label;
 const ves = k => T().vessel[k] || S.tests[k].vessel;
 const heat = k => T().heat[S.tests[k].heat] || S.tests[k].heat;
 
 /* ---------- helpers ---------- */
-// Sends a request to the Google Sheet back end (no Google login involved)
-async function call(action, ...args) {
+/* ---------- GitHub storage (one JSON file in a private repository) ---------- */
+let KEY = store.get('ghkey');
+const API = `https://api.github.com/repos/${GH.owner}/${GH.repo}`;
+function ghErr(msg, props) { const e = new Error(msg); Object.assign(e, props); return e; }
+async function gh(method, url, body, accept) {
+  if (!KEY) throw ghErr('No storage key on this phone.', { code: 'NOKEY' });
   let res;
   try {
-    res = await fetch(API_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-      body: JSON.stringify({ action, args, pin: S.pin })
+    res = await fetch(url, {
+      method, cache: 'no-store', credentials: 'omit',
+      headers: { 'Authorization': 'Bearer ' + KEY, 'Accept': accept || 'application/vnd.github+json',
+                 ...(body ? { 'Content-Type': 'application/json' } : {}) },
+      body: body ? JSON.stringify(body) : undefined
     });
-  } catch (e) {
-    const err = new Error('offline'); err.code = 'OFFLINE';
-    err.detail = 'Browser blocked the request to Apps Script (' + (e.message || e) + '). ' +
-      'Usually: the deployment is running old code without doPost, or a browser shield/extension blocks script.google.com.';
-    throw err;
-  }
-  const text = await res.text();
-  let data;
-  try { data = JSON.parse(text); }
-  catch (e) {
-    const err = new Error('The sheet did not reply properly (HTTP ' + res.status + ').');
-    err.detail = 'Apps Script replied with a page instead of data: ' +
-      text.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 200);
-    throw err;
-  }
-  if (!data.ok) { const err = new Error(data.error || 'Error'); err.code = data.code; throw err; }
-  return data.result;
+  } catch (e) { throw ghErr('offline', { code: 'OFFLINE', retry: true, detail: String(e.message || e) }); }
+  if (res.ok) return res;
+  let msg = ''; try { msg = (await res.json()).message || ''; } catch (e) {}
+  if (res.status === 401) throw ghErr(T().keyBad, { code: 'KEY', detail: 'GitHub: ' + msg });
+  if (res.status === 409 || res.status === 422 && /sha/i.test(msg)) throw ghErr('conflict', { code: 'CONFLICT', retry: true });
+  if (res.status === 403 && /rate limit/i.test(msg)) throw ghErr('GitHub is busy, retrying.', { retry: true });
+  if (res.status === 403) throw ghErr(T().keyBad, { code: 'KEY', detail: 'GitHub: ' + msg });
+  if (res.status === 404) throw ghErr('not found', { code: 'NOTFOUND', detail: 'GitHub: ' + msg });
+  throw ghErr('GitHub error ' + res.status + (msg ? ': ' + msg : ''), { retry: res.status >= 500 });
 }
+function b64encode(str) {
+  const bytes = new TextEncoder().encode(str); let bin = '';
+  for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+  return btoa(bin);
+}
+function b64decode(b64) {
+  const bin = atob(b64.replace(/\s/g, ''));
+  return new TextDecoder().decode(Uint8Array.from(bin, c => c.charCodeAt(0)));
+}
+const emptyFile = () => ({ app: 'proximate-weighing', version: 1, codes: [], samples: {} });
+// Read the data file. Returns { file, sha }; file is null if it doesn't exist yet.
+async function ghRead() {
+  const url = `${API}/contents/${GH.path}?ref=${GH.branch}`;
+  let meta;
+  try { meta = await (await gh('GET', url)).json(); }
+  catch (e) {
+    if (e.code !== 'NOTFOUND') throw e;
+    // Is the file missing, or is the repository unreachable with this key?
+    try { await gh('GET', API); } catch (e2) {
+      if (e2.code === 'NOTFOUND') throw ghErr(T().keyBad, { code: 'KEY', detail: `Repository ${GH.owner}/${GH.repo} not found for this key.` });
+      throw e2;
+    }
+    return { file: null, sha: null };
+  }
+  const text = meta.content ? b64decode(meta.content)
+             : await (await gh('GET', url, null, 'application/vnd.github.raw+json')).text();   // files over 1 MB
+  return { file: JSON.parse(text), sha: meta.sha };
+}
+async function ghWrite(file, sha, message) {
+  const body = { message, branch: GH.branch, content: b64encode(JSON.stringify(file, null, 1)) };
+  if (sha) body.sha = sha;
+  return (await (await gh('PUT', `${API}/contents/${GH.path}`, body)).json()).content.sha;
+}
+
+/* ---------- the data file <-> what the screens use ---------- */
+const stamp = d => { const x = new Date(d || Date.now()), p = n => String(n).padStart(2, '0');
+  return `${p(x.getDate())}-${x.toLocaleString('en', { month: 'short' })}-${x.getFullYear()} ${p(x.getHours())}:${p(x.getMinutes())}`; };
+function fileSample(f, code) {
+  if (!f.samples[code]) {
+    f.samples[code] = { tm: false, w: Object.fromEntries(ORDER.map(k => [k, [null, null, null]])), pct: {}, last: '' };
+    if (!f.codes.includes(code)) f.codes.push(code);
+  }
+  const s = f.samples[code]; s.pct = s.pct || {};
+  ORDER.forEach(k => { if (!s.w[k]) s.w[k] = [null, null, null]; });
+  return s;
+}
+// Apply one change (from this phone's waiting list) to the data file
+function fileApply(f, j) {
+  if (j.action === 'saveWeight') {
+    const s = fileSample(f, j.code);
+    s.w[j.key][j.step - 1] = j.value; delete s.pct[j.key];
+    s.last = `${j.worker || 'Unknown'} | ${TESTS[j.key].label} W${j.step} | ${stamp(j.at)}`;
+  } else if (j.action === 'setTmRequired') {
+    fileSample(f, j.code).tm = !!j.value;
+  } else if (j.action === 'addCodes') {
+    j.codes.forEach(c => fileSample(f, c));
+  } else if (j.action === 'removeCode') {
+    const s = f.samples[j.code];
+    if (s && !ORDER.some(k => s.w[k].some(v => v !== null) || s.pct[k] != null)) {
+      delete f.samples[j.code]; f.codes = f.codes.filter(c => c !== j.code);
+    }
+  } else if (j.action === 'importRows') {
+    j.rows.forEach(r => {
+      const s = fileSample(f, r.code);
+      ORDER.forEach(k => {
+        (r.w[k] || []).forEach((v, i) => { if (v !== null) s.w[k][i] = v; });
+        if (r.pct[k] != null && !s.w[k].every(v => v !== null)) s.pct[k] = r.pct[k];
+      });
+      if (r.tm) s.tm = true;
+      if (r.last && !s.last) s.last = r.last;
+    });
+  }
+}
+function toData(f) {
+  const samples = f.codes.filter(c => f.samples[c]).map(code => {
+    const fs = f.samples[code];
+    const s = { code, tmRequired: !!fs.tm, last: fs.last || '', tests: {} };
+    ORDER.forEach(k => { s.tests[k] = { w: fs.w[k].slice(), pct: isNum(fs.pct[k]) ? fs.pct[k] : null, done: 0, required: true }; });
+    recompute(s);
+    return s;
+  });
+  return { samples, tests: TESTS, order: ORDER };
+}
+// What the worker sees = last copy from GitHub + this phone's unsent changes
+function rebuild() {
+  const f = JSON.parse(JSON.stringify(S.file || emptyFile()));
+  Q.forEach(j => fileApply(f, j));
+  S.data = toData(f);
+}
+/* ---------- save on the phone first, send to the sheet in the background ---------- */
+const readJSON = (k, d) => { try { return JSON.parse(store.get(k)) || d; } catch (e) { return d; } };
+let Q = readJSON('queue', []);          // weights waiting to reach the sheet (kept if the app is closed)
+let syncing = false, syncTimer = null, syncFails = 0, lastSyncOk = 0;
+function saveQ() { store.set('queue', JSON.stringify(Q)); }
+function cacheFile() { if (S.file) store.set('file', JSON.stringify(S.file)); }
+
+const r2 = x => Math.round(x * 100) / 100;
+// Same rules as the sheet formulas, so the worker sees the result straight away
+function recompute(s) {
+  S.order.forEach(k => {
+    const t = s.tests[k], w = t.w;
+    let done = 0; while (done < 3 && isNum(w[done])) done++;
+    if (done === 3) {
+      if (k === 'ASH') t.pct = r2((w[2] - w[0]) / (w[1] - w[0]) * 100);
+      else if (k === 'VM') {
+        const mc = s.tests.MC && s.tests.MC.pct;
+        t.pct = isNum(mc) ? r2((w[1] - w[2]) / (w[1] - w[0]) * 100 - mc) : null;
+      } else t.pct = r2((w[1] - w[2]) / (w[1] - w[0]) * 100);
+    }
+    t.done = isNum(t.pct) ? 3 : done;
+    t.required = !S.tests[k].optional || s.tmRequired;
+  });
+  const req = S.order.filter(k => s.tests[k].required);
+  s.status = req.every(k => isNum(s.tests[k].pct) || (k === 'VM' && s.tests[k].done === 3)) ? 'Complete'
+           : S.order.some(k => s.tests[k].done > 0) ? 'In progress' : 'Pending';
+}
+function enqueue(job) {
+  job.id = Date.now() + '-' + Math.random().toString(36).slice(2, 7);
+  job.at = Date.now();
+  // a newer value for the same cell replaces an unsent older one
+  if (job.action === 'saveWeight' || job.action === 'setTmRequired')
+    Q = Q.filter(j => !(j.action === job.action && j.code === job.code && j.key === job.key && j.step === job.step));
+  Q.push(job); saveQ();
+  rebuild();
+  sync();
+}
+function commitMessage(batch) {
+  const first = batch[0];
+  const what = first.action === 'saveWeight' ? `${first.code} ${TESTS[first.key].label} W${first.step}`
+             : first.action === 'addCodes' ? `add ${first.codes.length} code(s)`
+             : first.action === 'importRows' ? `import ${first.rows.length} row(s)` : `${first.action} ${first.code || ''}`;
+  return `${what}${batch.length > 1 ? ` (+${batch.length - 1} more)` : ''} by ${first.worker || S.worker || 'app'}`;
+}
+async function sync() {
+  clearTimeout(syncTimer);
+  if (syncing || !Q.length || !KEY) { showSync(); return; }
+  syncing = true; S.syncErr = null; showSync();
+  const batch = Q.slice();
+  try {
+    for (let attempt = 0; ; attempt++) {
+      const { file, sha } = await ghRead();
+      const f = file || emptyFile();
+      batch.forEach(j => fileApply(f, j));
+      try { await ghWrite(f, sha, commitMessage(batch)); S.file = f; break; }
+      catch (e) { if (e.code !== 'CONFLICT' || attempt >= 4) throw e; }   // another phone saved first: read again
+    }
+    const sent = new Set(batch.map(j => j.id));
+    Q = Q.filter(j => !sent.has(j.id)); saveQ(); cacheFile();
+    syncFails = 0; lastSyncOk = Date.now();
+    rebuild();
+    if (!S.modal && S.view !== 'step' && S.view !== 'setup') render();
+  } catch (err) {
+    syncFails++;
+    S.syncErr = err;
+    if (err.retry || err.code === 'NOTFOUND') syncTimer = setTimeout(sync, Math.min(60000, 4000 * Math.pow(2, syncFails - 1)));
+  }
+  syncing = false; showSync();
+  if (Q.length && !syncFails) sync();       // changes made while saving
+}
+function showSync() {
+  const el = document.getElementById('sync'); if (!el) return;
+  const n = Q.length, t = T();
+  if (n) {
+    el.hidden = false;
+    el.className = syncFails ? 'bad' : '';
+    el.textContent = !KEY ? '⚠ ' + t.notSetUp
+      : S.syncErr && S.syncErr.code === 'KEY' ? '⚠ ' + t.keyBad
+      : syncFails ? t.retrying(n) : syncing ? t.sending(n) : t.pending(n);
+    if (!KEY || (S.syncErr && S.syncErr.code === 'KEY')) el.className = 'bad';
+  } else if (Date.now() - lastSyncOk < 2500) {
+    el.hidden = false; el.className = 'ok'; el.textContent = t.allSent;
+    setTimeout(showSync, 2600);
+  } else el.hidden = true;
+}
+document.getElementById('sync').addEventListener('click', () => { syncFails = 0; sync(); });
+
 function errText(err) {
   return err.code === 'OFFLINE' ? T().offline : (err.message || String(err));
-}
-function pinRejected() {
-  S.pin = ''; store.set('pin', ''); S.modal = null; S.busy = false; S.view = 'name';
-  render(); toast(T().wrongPin);
 }
 function esc(s) {
   return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -362,6 +568,7 @@ function header() {
       ${langBtn()}
       <button class="pill" data-act="refresh" aria-label="${esc(T().refresh)}">↻</button>
       <button class="pill" data-act="name">${esc(S.worker)}</button>
+      <button class="pill" data-act="setup" aria-label="Settings">⚙</button>
     </div></header>`;
 }
 
@@ -379,7 +586,7 @@ function listHTML() {
   const list = S.data.samples.filter(s =>
     (S.showDone || s.status !== 'Complete') && (!q || s.code.toLowerCase().includes(q)));
   if (!list.length)
-    return `<div class="empty">${esc(q ? T().noMatch(S.query) : T().allDone)}</div>`;
+    return `<div class="empty">${esc(q ? T().noMatch(S.query) : S.data.samples.length ? T().allDone : T().noCodes)}</div>`;
   return list.map(s => `
     <button class="sample" data-act="open-sample" data-code="${esc(s.code)}">
       <div class="code">${esc(s.code)}</div>
@@ -520,9 +727,132 @@ function renderName() {
     <h1 style="margin-top:12px">${esc(t.title)}</h1>
     <p class="sub">${esc(t.nameIntro)}</p>
     <input class="field" id="nm" type="text" placeholder="${esc(t.namePh)}" value="${esc(S.worker)}" autocomplete="name" aria-label="${esc(t.namePh)}">
-    <input class="field" id="pin" type="password" inputmode="numeric" placeholder="${esc(t.pinPh)}" value="${esc(S.pin)}" autocomplete="off" aria-label="${esc(t.pinPh)}">
     <div class="bar"><div class="inner"><button class="primary" data-act="save-name">${esc(t.start)}</button></div></div>`;
 }
+
+/* ---------- supervisor setup screen ---------- */
+function confirmTap(el) {            // second tap within 4 s confirms a risky action
+  if (el.dataset.armed) return true;
+  el.dataset.armed = '1'; const old = el.textContent; el.textContent = 'Tap again to confirm';
+  setTimeout(() => { delete el.dataset.armed; el.textContent = old; }, 4000);
+  return false;
+}
+function renderSetup() {
+  const linked = !!KEY, bad = S.syncErr && S.syncErr.code === 'KEY';
+  const empty = (S.data ? S.data.samples : []).filter(s => s.status === 'Pending' && !S.order.some(k => s.tests[k].done));
+  return `<div style="display:flex;justify-content:space-between;align-items:center">
+      <button class="back" data-act="setup-done">← Back</button>${langBtn()}</div>
+    <h2 class="title">Setup</h2>
+    <p class="sub">For the supervisor. Workers don't need this screen.</p>
+
+    <div class="prev" style="margin-top:0">
+      <div class="row"><span><b>Storage</b><br>github.com/${esc(GH.owner)}/${esc(GH.repo)} → ${esc(GH.path)}</span>
+        <span style="font-weight:700;color:${linked && !bad ? 'var(--ok)' : 'var(--err)'}">${linked ? (bad ? 'Key refused' : 'Connected') : 'Not set up'}</span></div>
+      <div class="row" style="display:block">
+        <input class="field" id="key" type="password" autocomplete="off" placeholder="${linked ? 'Paste a new key to replace it' : 'Paste the GitHub key (github_pat_…)'}" style="margin:0 0 8px">
+        <div class="btnrow"><button class="secondary" data-act="save-key">Save key</button>
+        ${linked ? '<button class="secondary" data-act="forget-key">Remove key from this phone</button>' : ''}</div>
+      </div>
+    </div>
+
+    <div class="prev">
+      <div class="row" style="display:block"><b>Add sample codes</b>
+        <p class="sub" style="margin:4px 0 8px">One code (T45), a range (T45-T60), or several separated by commas.</p>
+        <input class="field" id="newcodes" type="text" autocomplete="off" autocapitalize="characters" placeholder="${esc(nextCode())}" style="margin:0 0 8px">
+        <button class="secondary" data-act="add-codes" style="width:100%">Add codes</button></div>
+      ${empty.length ? `<div class="row" style="display:block"><b>Remove an unused code</b> <span class="sub">(only codes with no weights)</span>
+        <div class="chips" style="margin-top:8px">${empty.slice(-30).map(s => `<button class="chip" data-act="remove-code" data-code="${esc(s.code)}">${esc(s.code)} ✕</button>`).join('')}</div></div>` : ''}
+    </div>
+
+    <div class="prev">
+      <div class="row" style="display:block"><b>Results</b>
+        <p class="sub" style="margin:4px 0 8px">Download every sample as a spreadsheet file (opens in Excel or Google Sheets), in the same columns as the old logging sheet.</p>
+        <button class="secondary" data-act="export" style="width:100%">⤓ Download results (.csv)</button></div>
+      <div class="row" style="display:block"><b>Bring in old data</b>
+        <p class="sub" style="margin:4px 0 8px">In Google Sheets open the <i>logging</i> tab → File → Download → CSV, then choose that file here. Codes and weights are added; nothing is deleted.</p>
+        <button class="secondary" data-act="import" style="width:100%">Import logging CSV</button>
+        <input type="file" id="csvfile" accept=".csv,text/csv" hidden></div>
+    </div>`;
+}
+function saveKey() {
+  const v = (document.getElementById('key').value || '').trim();
+  if (!v) { toast('Paste the key first.'); return; }
+  KEY = v; store.set('ghkey', KEY); S.syncErr = null; syncFails = 0;
+  toast('Key saved. Checking…', true);
+  load(false).then(() => { if (S.view === 'setup') render(); if (!S.syncErr) toast('Connected to GitHub.', true); });
+}
+function nextCode() {
+  const nums = (S.data ? S.data.samples : []).map(s => (s.code.match(/^([A-Za-z]*)(\d+)$/) || [])).filter(m => m[2]);
+  if (!nums.length) return 'T01';
+  const last = nums[nums.length - 1], n = Math.max(...nums.filter(m => m[1] === last[1]).map(m => +m[2])) + 1;
+  return last[1] + String(n).padStart(last[2].length, '0');
+}
+function parseCodes(txt) {
+  const out = [];
+  txt.toUpperCase().split(/[,\s]+/).filter(Boolean).forEach(part => {
+    const m = part.match(/^([A-Z]*)(\d+)-([A-Z]*)(\d+)$/);
+    if (m) {
+      const a = +m[2], b = +m[4], w = m[2].length;
+      if (b - a > 500 || b < a) return;
+      for (let i = a; i <= b; i++) out.push(m[1] + String(i).padStart(w, '0'));
+    } else out.push(part);
+  });
+  return [...new Set(out)];
+}
+function addCodes() {
+  const inp = document.getElementById('newcodes');
+  const codes = parseCodes(inp.value || inp.placeholder);
+  const have = new Set((S.data ? S.data.samples : []).map(s => s.code));
+  const fresh = codes.filter(c => !have.has(c));
+  if (!fresh.length) { toast(codes.length ? 'Those codes already exist.' : 'Type a code first.'); return; }
+  enqueue({ action: 'addCodes', codes: fresh, worker: S.worker });
+  toast(`Added ${fresh.length} code${fresh.length > 1 ? 's' : ''}: ${fresh[0]}${fresh.length > 1 ? ' … ' + fresh[fresh.length - 1] : ''}`, true);
+  render();
+}
+function exportCSV() {
+  const q = v => { v = v == null ? '' : String(v); return /[",\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; };
+  const head1 = ['', ...ORDER.flatMap(k => [TESTS[k].label, '', '', '']), 'Tracking', '', ''];
+  const head2 = ['Code', ...ORDER.flatMap(() => ['W1', 'W2', 'W3', 'Percentage']), 'TM Required', 'Status', 'Last updated'];
+  const rows = S.data.samples.map(s => [s.code,
+    ...ORDER.flatMap(k => [...s.tests[k].w.map(v => isNum(v) ? v : ''), isNum(s.tests[k].pct) ? s.tests[k].pct : '']),
+    s.tmRequired ? 'Y' : '', s.status, s.last || '']);
+  const csv = '\ufeff' + [head1, head2, ...rows].map(r => r.map(q).join(',')).join('\r\n');
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
+  a.download = `proximate-results-${new Date().toISOString().slice(0, 10)}.csv`;
+  document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+}
+function parseCSV(text) {
+  const rows = []; let row = [], cell = '', inQ = false;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (inQ) { if (c === '"') { if (text[i + 1] === '"') { cell += '"'; i++; } else inQ = false; } else cell += c; }
+    else if (c === '"') inQ = true;
+    else if (c === ',') { row.push(cell); cell = ''; }
+    else if (c === '\n' || c === '\r') { if (c === '\r' && text[i + 1] === '\n') i++; row.push(cell); rows.push(row); row = []; cell = ''; }
+    else cell += c;
+  }
+  if (cell || row.length) { row.push(cell); rows.push(row); }
+  return rows;
+}
+document.addEventListener('change', e => {
+  if (e.target.id !== 'csvfile' || !e.target.files[0]) return;
+  e.target.files[0].text().then(text => {
+    const num = v => { v = String(v || '').trim().replace(',', '.'); return v !== '' && !isNaN(+v) ? +v : null; };
+    const rows = parseCSV(text.replace(/^\ufeff/, ''))
+      .filter(r => /^[A-Za-z]*\d+$/.test(String(r[0] || '').trim()))          // data rows only (skip headers)
+      .map(r => {
+        const out = { code: r[0].trim().toUpperCase(), w: {}, pct: {}, tm: /^(y|yes|true)$/i.test(String(r[17] || '').trim()), last: (r[19] || '').trim() };
+        ORDER.forEach((k, i) => { const c = 1 + i * 4; out.w[k] = [num(r[c]), num(r[c + 1]), num(r[c + 2])]; out.pct[k] = num(r[c + 3]); });
+        return out;
+      });
+    if (!rows.length) { toast('No sample rows found in that file.'); return; }
+    enqueue({ action: 'importRows', rows, worker: S.worker });
+    toast(`Imported ${rows.length} samples. Saving online…`, true);
+    render();
+  });
+  e.target.value = '';
+});
 
 function renderModal() {
   const m = S.modal;
@@ -579,9 +909,9 @@ function render() {
   S.lastView = S.view;
   document.documentElement.lang = S.lang;
   document.title = T().title;
-  if (!S.worker || !S.pin) S.view = 'name';
-  if (!S.data && S.view !== 'name') { app.innerHTML = `<div class="empty">${esc(T().loading)}</div>`; return; }
-  const v = { home: renderHome, sample: renderSample, step: renderStep, review: renderReview, name: renderName }[S.view];
+  if (!S.worker && S.view !== 'setup') S.view = 'name';
+  if (!S.data && S.view !== 'name' && S.view !== 'setup') { app.innerHTML = `<div class="empty">${esc(T().loading)}</div>`; return; }
+  const v = { home: renderHome, sample: renderSample, step: renderStep, review: renderReview, name: renderName, setup: renderSetup }[S.view];
   app.innerHTML = v() + renderModal();
   if (S.view === 'home') {
     if (prevView !== 'home' || S.restoreOnce) { S.restoreOnce = false; restorePos(); }
@@ -591,25 +921,38 @@ function render() {
   }
   if (!S.modal) {
     const nm = document.getElementById('nm');
-    const inp = document.getElementById('w') || (nm && nm.value ? document.getElementById('pin') : nm);
+    const inp = document.getElementById('w') || (nm && !nm.value ? nm : null);
     if (inp) inp.focus();
   }
 }
 
 /* ---------- actions ---------- */
+let loading = false;
 async function load(showToast) {
+  if (loading) return;
+  if (!KEY) { if (!S.data) renderNotReady(); return; }
+  loading = true;
   try {
-    const d = await call('getData');
-    S.data = d; S.tests = d.tests; S.order = d.order;
-    render();
+    const { file } = await ghRead();
+    S.file = file || emptyFile(); cacheFile();
+    rebuild();
+    if (!S.modal && S.view !== 'setup' && !(S.view === 'step' && document.activeElement && document.activeElement.id === 'w')) render();
     if (showToast) toast(T().updated, true);
+    sync();
   } catch (err) {
-    if (err.code === 'PIN') { pinRejected(); return; }
-    app.innerHTML = `<div class="empty">${esc(T().loadFail)}<br>${esc(errText(err))}
-      ${err.detail ? `<p style="font-size:.8rem;margin-top:14px">Details: ${esc(err.detail)}</p>` : ''}
-      <p style="font-size:.8rem"><a href="${esc(API_URL)}" target="_blank" rel="noopener">Test the back-end link</a></p>
-      <button class="secondary" data-act="refresh">${esc(T().tryAgain)}</button></div>`;
-  }
+    S.syncErr = err; showSync();
+    if (S.data) { if (showToast) toast(err.code === 'KEY' ? T().keyBad : T().cachedList); return; }
+    renderNotReady(err);
+  } finally { loading = false; }
+}
+function renderNotReady(err) {
+  if (S.view === 'setup' || S.view === 'name') return;
+  const t = T();
+  const msg = !KEY ? t.notSetUp : err && err.code === 'KEY' ? t.keyBad : t.loadFail + ' ' + (err && err.code === 'OFFLINE' ? t.offline : (err && err.message || ''));
+  app.innerHTML = `<div class="empty">${esc(msg)}
+    ${err && err.detail ? `<p style="font-size:.8rem;margin-top:14px">Details: ${esc(err.detail)}</p>` : ''}
+    <div class="btnrow" style="margin-top:20px"><button class="secondary" data-act="setup">⚙ Setup</button>
+    <button class="secondary" data-act="refresh">${esc(t.tryAgain)}</button></div></div>`;
 }
 
 function openTest(k) {
@@ -639,25 +982,16 @@ function askConfirm() {
   render();
 }
 
-async function doSave() {
-  S.busy = true; render();
-  try {
-    const updated = await call('saveWeight', S.code, S.test, S.step, S.modal.value, S.worker);
-    replaceSample(updated);
-    const st = updated.tests[S.test];
-    let m = { type: 'saved', next: 'sample', step: S.step, pct: st.pct };
-    if (S.editing) m.kind = 'corrected';
-    else if (S.step === 1) { m.kind = 's1'; m.next = 'step2'; }
-    else if (S.step === 2) m.kind = 's2';
-    else m.kind = 's3';
-    S.modal = m;
-  } catch (err) {
-    if (err.code === 'PIN') { pinRejected(); return; }
-    S.modal = null;
-    toast(errText(err));
-  } finally {
-    if (S.view !== 'name') { S.busy = false; render(); }
-  }
+function doSave() {
+  enqueue({ action: 'saveWeight', code: S.code, key: S.test, step: S.step, value: S.modal.value, worker: S.worker });
+  const st = sample(S.code).tests[S.test];
+  const m = { type: 'saved', next: 'sample', step: S.step, pct: st.pct };
+  if (S.editing) m.kind = 'corrected';
+  else if (S.step === 1) { m.kind = 's1'; m.next = 'step2'; }
+  else if (S.step === 2) m.kind = 's2';
+  else m.kind = 's3';
+  S.modal = m;
+  render();
 }
 
 async function setTm(val) {
@@ -665,22 +999,17 @@ async function setTm(val) {
   if (s.tmRequired === val) return;
   const tmK = S.order.find(k => S.tests[k].optional);
   if (!val && s.tests[tmK].done > 0) { toast(T().tmStays); return; }
-  S.busy = true;
-  try { replaceSample(await call('setTmRequired', S.code, val)); }
-  catch (err) { if (err.code === 'PIN') { pinRejected(); return; } toast(errText(err)); }
-  finally { if (S.view !== 'name') { S.busy = false; render(); } }
+  enqueue({ action: 'setTmRequired', code: S.code, value: val });
+  render();
 }
 
 function saveName() {
   const v = (document.getElementById('nm').value || '').trim();
-  const p = (document.getElementById('pin').value || '').trim();
   if (!v) { toast(T().enterName); return; }
-  if (!p) { toast(T().enterPin); document.getElementById('pin').focus(); return; }
-  document.querySelectorAll('.toast').forEach(el => el.remove());
   S.worker = v; store.set('worker', v);
-  S.pin = p; store.set('pin', p);
-  S.view = 'home'; S.data = null;
-  render(); load();
+  S.view = 'home';
+  if (S.data) render(); else renderNotReady();
+  load();
 }
 
 document.addEventListener('click', e => {
@@ -688,13 +1017,12 @@ document.addEventListener('click', e => {
   if (!el || S.busy) return;
   switch (el.dataset.act) {
     case 'lang': {
-      const nm = document.getElementById('nm'), pn = document.getElementById('pin');
-      const typed = nm ? [nm.value, pn.value] : null;   // keep half-typed fields
+      const nm = document.getElementById('nm');
+      const typed = nm ? [nm.value] : null;   // keep a half-typed name
       S.lang = S.lang === 'en' ? 'gu' : 'en'; store.set('lang', S.lang);
-      render();
+      render(); showSync();
       if (typed && document.getElementById('nm')) {
         document.getElementById('nm').value = typed[0];
-        document.getElementById('pin').value = typed[1];
       }
       break;
     }
@@ -730,6 +1058,14 @@ document.addEventListener('click', e => {
       render(); break;
     }
     case 'refresh': load(true); break;
+    case 'setup': S.view = 'setup'; render(); break;
+    case 'setup-done': S.view = S.worker ? 'home' : 'name'; if (S.data) render(); else renderNotReady(); load(false); break;
+    case 'save-key': saveKey(); break;
+    case 'forget-key': if (confirmTap(el)) { KEY = ''; store.set('ghkey', ''); S.syncErr = null; render(); showSync(); } break;
+    case 'add-codes': addCodes(); break;
+    case 'remove-code': if (confirmTap(el)) { enqueue({ action: 'removeCode', code: el.dataset.code, worker: S.worker }); render(); } break;
+    case 'export': exportCSV(); break;
+    case 'import': document.getElementById('csvfile').click(); break;
     case 'name': S.view = 'name'; render(); break;
     case 'save-name': saveName(); break;
   }
@@ -748,8 +1084,9 @@ document.addEventListener('input', e => {
 document.addEventListener('keydown', e => {
   if (e.key !== 'Enter' || S.busy) return;
   if (e.target.id === 'w') askConfirm();
-  else if (e.target.id === 'nm') document.getElementById('pin').focus();
-  else if (e.target.id === 'pin') saveName();
+  else if (e.target.id === 'nm') saveName();
+  else if (e.target.id === 'newcodes') addCodes();
+  else if (e.target.id === 'key') saveKey();
 });
 
 /* ---------- progressive web app ---------- */
@@ -765,9 +1102,27 @@ window.addEventListener('appinstalled', () => { installEvt = null; if (!S.modal)
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'visible' && S.view === 'home' && !S.modal && !S.busy && S.data) load(false);
 });
-window.addEventListener('online', () => { if (S.view === 'home' && !S.busy && S.worker && S.pin) load(false); });
+window.addEventListener('online', () => { syncFails = 0; sync(); });
+window.addEventListener('online', () => { if (S.view === 'home' && !S.busy && S.worker) load(false); });
+// Pick up other phones' work every minute while the list is on screen
+setInterval(() => {
+  if (document.visibilityState === 'visible' && S.view === 'home' && !S.modal && !S.busy) load(false);
+}, 60000);
 
-if (S.worker && S.pin) load(); else render();
+// One-time setup link: #key=...  (saved on this phone, then removed from the address bar)
+(function takeKeyFromLink() {
+  const m = location.hash.match(/key=([^&]+)/);
+  if (m) {
+    KEY = decodeURIComponent(m[1]).trim(); store.set('ghkey', KEY);
+    history.replaceState(null, '', location.pathname + location.search);
+    setTimeout(() => toast('This phone is now connected.', true), 300);
+  }
+})();
+S.tests = TESTS; S.order = ORDER;
+S.file = readJSON('file', null);
+if (S.file && S.file.codes) rebuild();
+if (S.worker) { if (S.data) render(); else renderNotReady(); load(); sync(); } else render();
+showSync();
 </script>
 </body>
 </html>
